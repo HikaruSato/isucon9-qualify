@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -268,6 +270,10 @@ type resSetting struct {
 	Categories        []Category `json:"categories"`
 }
 
+var UserCasheMap sync.Map
+
+var AllCategoryMap sync.Map
+
 func init() {
 	store = sessions.NewCookieStore([]byte("abc"))
 
@@ -279,6 +285,23 @@ func init() {
 }
 
 func main() {
+
+	// ログ出力設定 start
+	logfile, logErr := os.OpenFile("./debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	if logErr != nil {
+		panic("cannnot open test.log:" + logErr.Error())
+	}
+	defer logfile.Close()
+
+	// io.MultiWriteで、
+	// 標準出力とファイルの両方を束ねて、
+	// logの出力先に設定する
+	log.SetOutput(io.MultiWriter(logfile, os.Stdout))
+
+	log.SetFlags(log.Ldate | log.Ltime)
+	log.Println("Log Start")
+	// ログ出力設定 End
+
 	host := os.Getenv("MYSQL_HOST")
 	if host == "" {
 		host = "127.0.0.1"
@@ -312,6 +335,9 @@ func main() {
 		port,
 		dbname,
 	)
+
+	// カテゴリマップ初期化
+	setupAllCategoryMap()
 
 	dbx, err = sqlx.Open("mysql", dsn)
 	if err != nil {
@@ -359,6 +385,52 @@ func main() {
 	log.Fatal(http.ListenAndServe(":8000", mux))
 }
 
+func setupAllCategoryMap() {
+	AllCategoryMap.Store(1, Category{1, 0, "ソファー", ""})
+	AllCategoryMap.Store(2, Category{2, 1, "一人掛けソファー", ""})
+	AllCategoryMap.Store(3, Category{3, 1, "二人掛けソファー", ""})
+	AllCategoryMap.Store(4, Category{4, 1, "コーナーソファー", ""})
+	AllCategoryMap.Store(5, Category{5, 1, "二段ソファー", ""})
+	AllCategoryMap.Store(6, Category{6, 1, "ソファーベッド", ""})
+	AllCategoryMap.Store(10, Category{10, 0, "家庭用チェア", ""})
+	AllCategoryMap.Store(11, Category{11, 10, "スツール", ""})
+	AllCategoryMap.Store(12, Category{12, 10, "クッションスツール", ""})
+	AllCategoryMap.Store(13, Category{13, 10, "ダイニングチェア", ""})
+	AllCategoryMap.Store(14, Category{14, 10, "リビングチェア", ""})
+	AllCategoryMap.Store(15, Category{15, 10, "カウンターチェア", ""})
+	AllCategoryMap.Store(20, Category{20, 0, "キッズチェア", ""})
+	AllCategoryMap.Store(21, Category{21, 20, "学習チェア", ""})
+	AllCategoryMap.Store(22, Category{22, 20, "ベビーソファ", ""})
+	AllCategoryMap.Store(23, Category{23, 20, "キッズハイチェア", ""})
+	AllCategoryMap.Store(24, Category{24, 20, "テーブルチェア", ""})
+	AllCategoryMap.Store(30, Category{30, 0, "オフィスチェア", ""})
+	AllCategoryMap.Store(31, Category{31, 30, "デスクチェア", ""})
+	AllCategoryMap.Store(32, Category{32, 30, "ビジネスチェア", ""})
+	AllCategoryMap.Store(33, Category{33, 30, "回転チェア", ""})
+	AllCategoryMap.Store(34, Category{34, 30, "リクライニングチェア", ""})
+	AllCategoryMap.Store(35, Category{35, 30, "投擲用椅子", ""})
+	AllCategoryMap.Store(40, Category{40, 0, "折りたたみ椅子", ""})
+	AllCategoryMap.Store(41, Category{41, 40, "パイプ椅子", ""})
+	AllCategoryMap.Store(42, Category{42, 40, "木製折りたたみ椅子", ""})
+	AllCategoryMap.Store(43, Category{43, 40, "キッチンチェア", ""})
+	AllCategoryMap.Store(44, Category{44, 40, "アウトドアチェア", ""})
+	AllCategoryMap.Store(45, Category{45, 40, "作業椅子", ""})
+	AllCategoryMap.Store(50, Category{50, 0, "ベンチ", ""})
+	AllCategoryMap.Store(51, Category{51, 50, "一人掛けベンチ", ""})
+	AllCategoryMap.Store(52, Category{52, 50, "二人掛けベンチ", ""})
+	AllCategoryMap.Store(53, Category{53, 50, "アウトドア用ベンチ", ""})
+	AllCategoryMap.Store(54, Category{54, 50, "収納付きベンチ", ""})
+	AllCategoryMap.Store(55, Category{55, 50, "背もたれ付きベンチ", ""})
+	AllCategoryMap.Store(56, Category{56, 50, "ベンチマーク", ""})
+	AllCategoryMap.Store(60, Category{60, 0, "座椅子", ""})
+	AllCategoryMap.Store(61, Category{61, 60, "和風座椅子", ""})
+	AllCategoryMap.Store(62, Category{62, 60, "高座椅子", ""})
+	AllCategoryMap.Store(63, Category{63, 60, "ゲーミング座椅子", ""})
+	AllCategoryMap.Store(64, Category{64, 60, "ロッキングチェア", ""})
+	AllCategoryMap.Store(65, Category{65, 60, "座布団", ""})
+	AllCategoryMap.Store(66, Category{66, 60, "空気椅子", ""})
+}
+
 func getSession(r *http.Request) *sessions.Session {
 	session, _ := store.Get(r, sessionName)
 
@@ -383,6 +455,12 @@ func getUser(r *http.Request) (user User, errCode int, errMsg string) {
 		return user, http.StatusNotFound, "no session"
 	}
 
+	if userIDInt, ok := userID.(int64); ok {
+		if user, ok := UserCasheMap.Load(userIDInt); ok {
+			return user.(User), http.StatusOK, ""
+		}
+	}
+
 	err := dbx.Get(&user, "SELECT * FROM `users` WHERE `id` = ?", userID)
 	if err == sql.ErrNoRows {
 		return user, http.StatusNotFound, "user not found"
@@ -396,19 +474,37 @@ func getUser(r *http.Request) (user User, errCode int, errMsg string) {
 }
 
 func getUserSimpleByID(q sqlx.Queryer, userID int64) (userSimple UserSimple, err error) {
-	user := User{}
-	err = sqlx.Get(q, &user, "SELECT * FROM `users` WHERE `id` = ?", userID)
-	if err != nil {
+	if userInterface, ok := UserCasheMap.Load(userID); ok {
+		user := userInterface.(User)
+		userSimple.ID = user.ID
+		userSimple.AccountName = user.AccountName
+		userSimple.NumSellItems = user.NumSellItems
 		return userSimple, err
 	}
+
+	user := User{}
+
+	if userCache, ok := UserCasheMap.Load(userID); ok {
+		user = userCache.(User)
+	} else {
+		err = sqlx.Get(q, &user, "SELECT * FROM `users` WHERE `id` = ?", userID)
+		if err != nil {
+			return userSimple, err
+		}
+	}
+
+	UserCasheMap.Store(userID, user)
 	userSimple.ID = user.ID
 	userSimple.AccountName = user.AccountName
 	userSimple.NumSellItems = user.NumSellItems
+
 	return userSimple, err
 }
 
 func getCategoryByID(q sqlx.Queryer, categoryID int) (category Category, err error) {
-	err = sqlx.Get(q, &category, "SELECT * FROM `categories` WHERE `id` = ?", categoryID)
+	err = nil
+	categoryCache, _ := AllCategoryMap.Load(categoryID)
+	category = categoryCache.(Category)
 	if category.ParentID != 0 {
 		parentCategory, err := getCategoryByID(q, category.ParentID)
 		if err != nil {
@@ -417,6 +513,18 @@ func getCategoryByID(q sqlx.Queryer, categoryID int) (category Category, err err
 		category.ParentCategoryName = parentCategory.CategoryName
 	}
 	return category, err
+}
+
+func getCategoryByParentID(parentID int) (parents []Category) {
+	AllCategoryMap.Range(func(key, value interface{}) bool {
+		category := value.(Category)
+		if category.ParentID == parentID {
+			parents = append(parents, category)
+		}
+		return true
+	})
+
+	return parents
 }
 
 func getConfigByName(name string) (string, error) {
@@ -493,7 +601,7 @@ func postInitialize(w http.ResponseWriter, r *http.Request) {
 
 	res := resInitialize{
 		// キャンペーン実施時には還元率の設定を返す。詳しくはマニュアルを参照のこと。
-		Campaign: 0,
+		Campaign: 4,
 		// 実装言語を返す
 		Language: "Go",
 	}
@@ -613,10 +721,18 @@ func getNewCategoryItems(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var categoryIDs []int
-	err = dbx.Select(&categoryIDs, "SELECT id FROM `categories` WHERE parent_id=?", rootCategory.ID)
-	if err != nil {
-		log.Print(err)
-		outputErrorMsg(w, http.StatusInternalServerError, "db error")
+	//err = dbx.Select(&categoryIDs, "SELECT id FROM `categories` WHERE parent_id=?", rootCategory.ID)
+	parentCategories := getCategoryByParentID(rootCategory.ID)
+	for _, v := range parentCategories {
+		categoryIDs = append(categoryIDs, v.ID)
+	}
+
+	// if err != nil {
+	if len(parentCategories) == 0 {
+		// log.Print(err)
+		// outputErrorMsg(w, http.StatusInternalServerError, "db error")
+		log.Println("parentCategories == 0")
+		outputErrorMsg(w, http.StatusInternalServerError, "parentCategories == 0 error")
 		return
 	}
 
@@ -867,19 +983,28 @@ func getTransactions(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	tx := dbx.MustBegin()
+	//tx := dbx.MustBegin()
 	items := []Item{}
 	if itemID > 0 && createdAt > 0 {
 		// paging
-		err := tx.Select(&items,
-			"SELECT * FROM `items` WHERE (`seller_id` = ? OR `buyer_id` = ?) AND `status` IN (?,?,?,?,?) AND (`created_at` < ?  OR (`created_at` <= ? AND `id` < ?)) ORDER BY `created_at` DESC, `id` DESC LIMIT ?",
+		// err := dbx.Select(&items,
+		// 	"SELECT * FROM `items` WHERE (`seller_id` = ? OR `buyer_id` = ?) AND `status` IN (?,?,?,?,?) AND (`created_at` < ?  OR (`created_at` <= ? AND `id` < ?)) ORDER BY `created_at` DESC, `id` DESC LIMIT ?",
+		// 	user.ID,
+		// 	user.ID,
+		// 	ItemStatusOnSale,
+		// 	ItemStatusTrading,
+		// 	ItemStatusSoldOut,
+		// 	ItemStatusCancel,
+		// 	ItemStatusStop,
+		// 	time.Unix(createdAt, 0),
+		// 	time.Unix(createdAt, 0),
+		// 	itemID,
+		// 	TransactionsPerPage+1,
+		// )
+		err := dbx.Select(&items,
+			"SELECT * FROM `items` WHERE (`seller_id` = ? OR `buyer_id` = ?) AND (`created_at` < ?  OR (`created_at` <= ? AND `id` < ?)) ORDER BY `created_at` DESC, `id` DESC LIMIT ?",
 			user.ID,
 			user.ID,
-			ItemStatusOnSale,
-			ItemStatusTrading,
-			ItemStatusSoldOut,
-			ItemStatusCancel,
-			ItemStatusStop,
 			time.Unix(createdAt, 0),
 			time.Unix(createdAt, 0),
 			itemID,
@@ -888,42 +1013,37 @@ func getTransactions(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Print(err)
 			outputErrorMsg(w, http.StatusInternalServerError, "db error")
-			tx.Rollback()
+			//tx.Rollback()
 			return
 		}
 	} else {
 		// 1st page
-		err := tx.Select(&items,
-			"SELECT * FROM `items` WHERE (`seller_id` = ? OR `buyer_id` = ?) AND `status` IN (?,?,?,?,?) ORDER BY `created_at` DESC, `id` DESC LIMIT ?",
+		err := dbx.Select(&items,
+			"SELECT * FROM `items` WHERE (`seller_id` = ? OR `buyer_id` = ?) ORDER BY `created_at` DESC, `id` DESC LIMIT ?",
 			user.ID,
 			user.ID,
-			ItemStatusOnSale,
-			ItemStatusTrading,
-			ItemStatusSoldOut,
-			ItemStatusCancel,
-			ItemStatusStop,
 			TransactionsPerPage+1,
 		)
 		if err != nil {
 			log.Print(err)
 			outputErrorMsg(w, http.StatusInternalServerError, "db error")
-			tx.Rollback()
+			//tx.Rollback()
 			return
 		}
 	}
 
 	itemDetails := []ItemDetail{}
 	for _, item := range items {
-		seller, err := getUserSimpleByID(tx, item.SellerID)
+		seller, err := getUserSimpleByID(dbx, item.SellerID)
 		if err != nil {
 			outputErrorMsg(w, http.StatusNotFound, "seller not found")
-			tx.Rollback()
+			//tx.Rollback()
 			return
 		}
-		category, err := getCategoryByID(tx, item.CategoryID)
+		category, err := getCategoryByID(dbx, item.CategoryID)
 		if err != nil {
 			outputErrorMsg(w, http.StatusNotFound, "category not found")
-			tx.Rollback()
+			//tx.Rollback()
 			return
 		}
 
@@ -947,10 +1067,10 @@ func getTransactions(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if item.BuyerID != 0 {
-			buyer, err := getUserSimpleByID(tx, item.BuyerID)
+			buyer, err := getUserSimpleByID(dbx, item.BuyerID)
 			if err != nil {
 				outputErrorMsg(w, http.StatusNotFound, "buyer not found")
-				tx.Rollback()
+				//tx.Rollback()
 				return
 			}
 			itemDetail.BuyerID = item.BuyerID
@@ -958,27 +1078,27 @@ func getTransactions(w http.ResponseWriter, r *http.Request) {
 		}
 
 		transactionEvidence := TransactionEvidence{}
-		err = tx.Get(&transactionEvidence, "SELECT * FROM `transaction_evidences` WHERE `item_id` = ?", item.ID)
+		err = dbx.Get(&transactionEvidence, "SELECT * FROM `transaction_evidences` WHERE `item_id` = ?", item.ID)
 		if err != nil && err != sql.ErrNoRows {
 			// It's able to ignore ErrNoRows
 			log.Print(err)
 			outputErrorMsg(w, http.StatusInternalServerError, "db error")
-			tx.Rollback()
+			//tx.Rollback()
 			return
 		}
 
 		if transactionEvidence.ID > 0 {
 			shipping := Shipping{}
-			err = tx.Get(&shipping, "SELECT * FROM `shippings` WHERE `transaction_evidence_id` = ?", transactionEvidence.ID)
+			err = dbx.Get(&shipping, "SELECT * FROM `shippings` WHERE `transaction_evidence_id` = ?", transactionEvidence.ID)
 			if err == sql.ErrNoRows {
 				outputErrorMsg(w, http.StatusNotFound, "shipping not found")
-				tx.Rollback()
+				//tx.Rollback()
 				return
 			}
 			if err != nil {
 				log.Print(err)
 				outputErrorMsg(w, http.StatusInternalServerError, "db error")
-				tx.Rollback()
+				// tx.Rollback()
 				return
 			}
 			ssr, err := APIShipmentStatus(getShipmentServiceURL(), &APIShipmentStatusReq{
@@ -987,7 +1107,7 @@ func getTransactions(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				log.Print(err)
 				outputErrorMsg(w, http.StatusInternalServerError, "failed to request to shipment service")
-				tx.Rollback()
+				// tx.Rollback()
 				return
 			}
 
@@ -998,7 +1118,7 @@ func getTransactions(w http.ResponseWriter, r *http.Request) {
 
 		itemDetails = append(itemDetails, itemDetail)
 	}
-	tx.Commit()
+	//tx.Commit()
 
 	hasNext := false
 	if len(itemDetails) > TransactionsPerPage {
@@ -1144,6 +1264,7 @@ func postItemEdit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	targetItem := Item{}
+	// err = dbx.Get(&targetItem, "SELECT * FROM `items` WHERE `id` = ? for update", itemID)
 	err = dbx.Get(&targetItem, "SELECT * FROM `items` WHERE `id` = ?", itemID)
 	if err == sql.ErrNoRows {
 		outputErrorMsg(w, http.StatusNotFound, "item not found")
@@ -1163,6 +1284,7 @@ func postItemEdit(w http.ResponseWriter, r *http.Request) {
 
 	tx := dbx.MustBegin()
 	err = tx.Get(&targetItem, "SELECT * FROM `items` WHERE `id` = ? FOR UPDATE", itemID)
+	//err = tx.Get(&targetItem, "SELECT * FROM `items` WHERE `id` = ?", itemID)
 	if err != nil {
 		log.Print(err)
 
@@ -1317,6 +1439,7 @@ func postBuy(w http.ResponseWriter, r *http.Request) {
 
 	seller := User{}
 	err = tx.Get(&seller, "SELECT * FROM `users` WHERE `id` = ? FOR UPDATE", targetItem.SellerID)
+	//err = tx.Get(&seller, "SELECT * FROM `users` WHERE `id` = ?", targetItem.SellerID)
 	if err == sql.ErrNoRows {
 		outputErrorMsg(w, http.StatusNotFound, "seller not found")
 		tx.Rollback()
@@ -1499,7 +1622,8 @@ func postShip(w http.ResponseWriter, r *http.Request) {
 	tx := dbx.MustBegin()
 
 	item := Item{}
-	err = tx.Get(&item, "SELECT * FROM `items` WHERE `id` = ? FOR UPDATE", itemID)
+	//err = tx.Get(&item, "SELECT * FROM `items` WHERE `id` = ? FOR UPDATE", itemID)
+	err = tx.Get(&item, "SELECT * FROM `items` WHERE `id` = ?", itemID)
 	if err == sql.ErrNoRows {
 		outputErrorMsg(w, http.StatusNotFound, "item not found")
 		tx.Rollback()
@@ -1630,7 +1754,8 @@ func postShipDone(w http.ResponseWriter, r *http.Request) {
 	tx := dbx.MustBegin()
 
 	item := Item{}
-	err = tx.Get(&item, "SELECT * FROM `items` WHERE `id` = ? FOR UPDATE", itemID)
+	//err = tx.Get(&item, "SELECT * FROM `items` WHERE `id` = ? FOR UPDATE", itemID)
+	err = tx.Get(&item, "SELECT * FROM `items` WHERE `id` = ?", itemID)
 	if err == sql.ErrNoRows {
 		outputErrorMsg(w, http.StatusNotFound, "items not found")
 		tx.Rollback()
@@ -1970,17 +2095,22 @@ func postSell(w http.ResponseWriter, r *http.Request) {
 	tx := dbx.MustBegin()
 
 	seller := User{}
-	err = tx.Get(&seller, "SELECT * FROM `users` WHERE `id` = ? FOR UPDATE", user.ID)
-	if err == sql.ErrNoRows {
-		outputErrorMsg(w, http.StatusNotFound, "user not found")
-		tx.Rollback()
-		return
-	}
-	if err != nil {
-		log.Print(err)
-		outputErrorMsg(w, http.StatusInternalServerError, "db error")
-		tx.Rollback()
-		return
+	//err = tx.Get(&seller, "SELECT * FROM `users` WHERE `id` = ? FOR UPDATE", user.ID)
+	if userCache, ok := UserCasheMap.Load(user.ID); ok {
+		seller = userCache.(User)
+	} else {
+		err = tx.Get(&seller, "SELECT * FROM `users` WHERE `id` = ?", user.ID)
+		if err == sql.ErrNoRows {
+			outputErrorMsg(w, http.StatusNotFound, "user not found")
+			tx.Rollback()
+			return
+		}
+		if err != nil {
+			log.Print(err)
+			outputErrorMsg(w, http.StatusInternalServerError, "db error")
+			tx.Rollback()
+			return
+		}
 	}
 
 	result, err := tx.Exec("INSERT INTO `items` (`seller_id`, `status`, `name`, `price`, `description`,`image_name`,`category_id`) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -2013,6 +2143,7 @@ func postSell(w http.ResponseWriter, r *http.Request) {
 		now,
 		seller.ID,
 	)
+
 	if err != nil {
 		log.Print(err)
 
@@ -2020,6 +2151,14 @@ func postSell(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tx.Commit()
+
+	// cache更新
+	if userCahce, ok := UserCasheMap.Load(seller.ID); ok {
+		user := userCahce.(User)
+		user.NumSellItems = seller.NumSellItems + 1
+		user.LastBump = now
+		UserCasheMap.Store(seller.ID, user)
+	}
 
 	w.Header().Set("Content-Type", "application/json;charset=utf-8")
 	json.NewEncoder(w).Encode(resSell{ID: itemID})
@@ -2058,7 +2197,8 @@ func postBump(w http.ResponseWriter, r *http.Request) {
 	tx := dbx.MustBegin()
 
 	targetItem := Item{}
-	err = tx.Get(&targetItem, "SELECT * FROM `items` WHERE `id` = ? FOR UPDATE", itemID)
+	//err = tx.Get(&targetItem, "SELECT * FROM `items` WHERE `id` = ? FOR UPDATE", itemID)
+	err = tx.Get(&targetItem, "SELECT * FROM `items` WHERE `id` = ?", itemID)
 	if err == sql.ErrNoRows {
 		outputErrorMsg(w, http.StatusNotFound, "item not found")
 		tx.Rollback()
@@ -2078,17 +2218,22 @@ func postBump(w http.ResponseWriter, r *http.Request) {
 	}
 
 	seller := User{}
-	err = tx.Get(&seller, "SELECT * FROM `users` WHERE `id` = ? FOR UPDATE", user.ID)
-	if err == sql.ErrNoRows {
-		outputErrorMsg(w, http.StatusNotFound, "user not found")
-		tx.Rollback()
-		return
-	}
-	if err != nil {
-		log.Print(err)
-		outputErrorMsg(w, http.StatusInternalServerError, "db error")
-		tx.Rollback()
-		return
+	//err = tx.Get(&seller, "SELECT * FROM `users` WHERE `id` = ? FOR UPDATE", user.ID)
+	if userCache, ok := UserCasheMap.Load(user.ID); ok {
+		seller = userCache.(User)
+	} else {
+		err = tx.Get(&seller, "SELECT * FROM `users` WHERE `id` = ?", user.ID)
+		if err == sql.ErrNoRows {
+			outputErrorMsg(w, http.StatusNotFound, "user not found")
+			tx.Rollback()
+			return
+		}
+		if err != nil {
+			log.Print(err)
+			outputErrorMsg(w, http.StatusInternalServerError, "db error")
+			tx.Rollback()
+			return
+		}
 	}
 
 	now := time.Now()
@@ -2130,6 +2275,12 @@ func postBump(w http.ResponseWriter, r *http.Request) {
 
 	tx.Commit()
 
+	if userCache, ok := UserCasheMap.Load(seller.ID); ok {
+		user := userCache.(User)
+		user.LastBump = now
+		UserCasheMap.Store(seller.ID, user)
+	}
+
 	w.Header().Set("Content-Type", "application/json;charset=utf-8")
 	json.NewEncoder(w).Encode(&resItemEdit{
 		ItemID:        targetItem.ID,
@@ -2154,12 +2305,10 @@ func getSettings(w http.ResponseWriter, r *http.Request) {
 
 	categories := []Category{}
 
-	err := dbx.Select(&categories, "SELECT * FROM `categories`")
-	if err != nil {
-		log.Print(err)
-		outputErrorMsg(w, http.StatusInternalServerError, "db error")
-		return
-	}
+	AllCategoryMap.Range(func(key, value interface{}) bool {
+		categories = append(categories, value.(Category))
+		return true
+	})
 	ress.Categories = categories
 
 	w.Header().Set("Content-Type", "application/json;charset=utf-8")
@@ -2184,16 +2333,30 @@ func postLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	u := User{}
-	err = dbx.Get(&u, "SELECT * FROM `users` WHERE `account_name` = ?", accountName)
-	if err == sql.ErrNoRows {
-		outputErrorMsg(w, http.StatusUnauthorized, "アカウント名かパスワードが間違えています")
-		return
-	}
-	if err != nil {
-		log.Print(err)
 
-		outputErrorMsg(w, http.StatusInternalServerError, "db error")
-		return
+	UserCasheMap.Range(func(key, value interface{}) bool {
+		user := value.(User)
+		if user.AccountName == accountName {
+			u = user
+			return false
+		}
+		return true
+	})
+
+	if u.ID == 0 {
+		err = dbx.Get(&u, "SELECT * FROM `users` WHERE `account_name` = ?", accountName)
+		if err == sql.ErrNoRows {
+			outputErrorMsg(w, http.StatusUnauthorized, "アカウント名かパスワードが間違えています")
+			return
+		}
+		if err != nil {
+			log.Print(err)
+
+			outputErrorMsg(w, http.StatusInternalServerError, "db error")
+			return
+		}
+	} else {
+		log.Printf("use User Cache userID:%d", u.ID)
 	}
 
 	err = bcrypt.CompareHashAndPassword(u.HashedPassword, []byte(password))
